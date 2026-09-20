@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0D0D0D"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="28dp"
+        android:gravity="center_horizontal">
+
+        <!-- App title -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="32dp"
+            android:text="STAGE MIC"
+            android:textColor="#FFFFFF"
+            android:textSize="28sp"
+            android:letterSpacing="0.3"
+            android:fontFamily="sans-serif-light"/>
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="wireless microphone"
+            android:textColor="#666666"
+            android:textSize="13sp"
+            android:letterSpacing="0.05"/>
+
+        <!-- Divider -->
+        <View
+            android:layout_width="40dp"
+            android:layout_height="1dp"
+            android:layout_marginTop="24dp"
+            android:background="#333333"/>
+
+        <!-- Status row -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="32dp"
+            android:gravity="center_vertical">
+
+            <View
+                android:id="@+id/statusDot"
+                android:layout_width="10dp"
+                android:layout_height="10dp"
+                android:background="@drawable/dot_disconnected"/>
+
+            <TextView
+                android:id="@+id/tvStatus"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="10dp"
+                android:text="Enter receiver link and connect"
+                android:textColor="#AAAAAA"
+                android:textSize="14sp"/>
+
+        </LinearLayout>
+
+        <!-- Phone IP hint -->
+        <TextView
+            android:id="@+id/tvPhoneIp"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="This phone's IP: —"
+            android:textColor="#555555"
+            android:textSize="12sp"/>
+
+        <Button
+            android:id="@+id/btnDiscover"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="16dp"
+            android:text="FIND RECEIVER ON WI-FI"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:letterSpacing="0.08"
+            android:backgroundTint="#333333"
+            app:cornerRadius="4dp"/>
+
+        <!-- Receiver URL input card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_marginTop="32dp"
+            android:background="#1A1A1A"
+            android:padding="20dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Receiver HTTPS link"
+                android:textColor="#888888"
+                android:textSize="12sp"
+                android:letterSpacing="0.05"/>
+
+            <EditText
+                android:id="@+id/etIpAddress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:hint="https://example.trycloudflare.com"
+                android:inputType="textUri"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#444444"
+                android:textSize="20sp"
+                android:background="@null"
+                android:paddingBottom="8dp"
+                android:fontFamily="monospace"
+                android:maxLines="1"
+                android:imeOptions="actionDone"/>
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#333333"/>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Use discovery for local Wi-Fi, or paste an HTTPS tunnel link"
+                android:textColor="#444444"
+                android:textSize="11sp"
+                android:fontFamily="monospace"/>
+
+        </LinearLayout>
+
+        <!-- Connect button -->
+        <Button
+            android:id="@+id/btnConnect"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:layout_marginTop="16dp"
+            android:text="CONNECT"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:letterSpacing="0.15"
+            android:backgroundTint="#1E6EE8"
+            app:cornerRadius="4dp"/>
+
+        <!-- Latency -->
+        <TextView
+            android:id="@+id/tvLatency"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text=""
+            android:textColor="#666666"
+            android:textSize="12sp"
+            android:fontFamily="monospace"/>
+
+        <!-- Level meter section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="32dp"
+            android:text="Audio level"
+            android:textColor="#555555"
+            android:textSize="12sp"/>
+
+        <ProgressBar
+            android:id="@+id/levelBar"
+            style="@android:style/Widget.ProgressBar.Horizontal"
+            android:layout_width="match_parent"
+            android:layout_height="8dp"
+            android:layout_marginTop="8dp"
+            android:max="100"
+            android:progress="0"
+            android:progressTint="#1E6EE8"
+            android:progressBackgroundTint="#222222"/>
+
+        <!-- Talk button — hidden until connected -->
+        <Button
+            android:id="@+id/btnTalk"
+            android:layout_width="match_parent"
+            android:layout_height="120dp"
+            android:layout_marginTop="32dp"
+            android:text="HOLD TO TALK"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:letterSpacing="0.1"
+            android:backgroundTint="#B71C1C"
+            app:cornerRadius="8dp"
+            android:visibility="gone"/>
+
+        <!-- Usage hint -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="40dp"
+            android:text="Point the phone's mic toward your mouth. Keep the speaker behind you to avoid feedback."
+            android:textColor="#333333"
+            android:textSize="12sp"
+            android:lineSpacingMultiplier="1.5"
+            android:gravity="center"/>
+
+        <View android:layout_width="match_parent" android:layout_height="32dp"/>
+
+    </LinearLayout>
+
+</ScrollView>

@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0d0d0d">
+  <title>StageMic Web</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    body { align-items: center; background: #0d0d0d; color: #fff; display: flex; justify-content: center; margin: 0; min-height: 100vh; }
+    main { box-sizing: border-box; max-width: 430px; padding: 32px 28px; text-align: center; width: 100%; }
+    h1 { font-size: 31px; font-weight: 300; letter-spacing: .28em; margin: 0 0 7px; }
+    .sub { color: #777; margin: 0 0 48px; }
+    #state { color: #aaa; line-height: 1.5; min-height: 48px; }
+    #meter { background: #242424; border-radius: 9px; height: 9px; margin: 30px 0; overflow: hidden; }
+    #level { background: #2274ee; height: 100%; transition: width 70ms; width: 0; }
+    button { background: #b71c1c; border: 0; border-radius: 8px; color: white; font-size: 17px; font-weight: 600; letter-spacing: .09em; min-height: 122px; width: 100%; }
+    button.live { background: #15733a; }
+    button:disabled { background: #444; }
+    #calibrate { background: transparent; border: 1px solid #555; border-radius: 6px; color: #bbb; font-size: 12px; letter-spacing: .08em; margin-top: 16px; min-height: 44px; }
+    #calibrate:disabled { color: #555; }
+    .note { color: #666; font-size: 13px; line-height: 1.5; margin-top: 31px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>STAGE MIC</h1>
+    <p class="sub">browser microphone</p>
+    <p id="state">Ready. Tap Start Microphone.</p>
+    <div id="meter" aria-label="Microphone level"><div id="level"></div></div>
+    <button id="toggle" type="button">START MICROPHONE</button>
+    <button id="calibrate" type="button" disabled>CALIBRATE ROOM NOISE</button>
+    <p class="note">Use headphones or keep the phone away from the PC speaker to prevent feedback.</p>
+  </main>
+  <script>
+    const outputRate = 16000;
+    const state = document.querySelector('#state');
+    const toggle = document.querySelector('#toggle');
+    const calibrate = document.querySelector('#calibrate');
+    const level = document.querySelector('#level');
+    let socket, context, stream, source, highPass, compressor, processor, silentGain;
+    let gateGain = 0;
+    let gateHoldBuffers = 0;
+    let gateThreshold = 0.018;
+    let calibrationFrames = 0;
+    let calibrationTotal = 0;
+    let calibrating = false;
+
+    function setState(text) { state.textContent = text; }
+    function wsUrl() { return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/audio`; }
+
+    function toPcm16(input, inputRate) {
+      // The phone's noise suppression removes most steady noise. This small
+      // gate removes the remaining room hiss between words without cutting
+      // off normal speech (the hold time keeps it open through short pauses).
+      let sum = 0;
+      for (const sample of input) sum += sample * sample;
+      const rms = Math.sqrt(sum / input.length);
+      if (calibrating) {
+        calibrationFrames++;
+        calibrationTotal += rms;
+        if (calibrationFrames >= 45) { // about two seconds at typical phone rates
+          const noiseFloor = calibrationTotal / calibrationFrames;
+          // Keep enough separation to block room noise while retaining speech.
+          gateThreshold = Math.min(0.08, Math.max(0.014, noiseFloor * 2.5 + 0.004));
+          calibrating = false;
+          calibrate.disabled = false;
+          setState('LIVE — room noise filtered. Speak normally.');
+        }
+      }
+      if (rms >= gateThreshold) gateHoldBuffers = 8;
+      else if (gateHoldBuffers > 0) gateHoldBuffers--;
+      const targetGain = gateHoldBuffers > 0 ? 1 : 0;
+
+      if (inputRate === outputRate) {
+        const output = new Int16Array(input.length);
+        for (let i = 0; i < input.length; i++) {
+          gateGain += (targetGain - gateGain) * 0.035;
+          const value = Math.max(-1, Math.min(1, input[i] * gateGain));
+          output[i] = value < 0 ? value * 32768 : value * 32767;
+        }
+        return output;
+      }
+      const ratio = inputRate / outputRate;
+      const output = new Int16Array(Math.floor(input.length / ratio));
+      let inputOffset = 0;
+      for (let i = 0; i < output.length; i++) {
+        const nextOffset = Math.min(Math.round((i + 1) * ratio), input.length);
+        let sum = 0;
+        let count = 0;
+        while (inputOffset < nextOffset) { sum += input[inputOffset++]; count++; }
+        gateGain += (targetGain - gateGain) * 0.1;
+        const value = Math.max(-1, Math.min(1, (count ? sum / count : 0) * gateGain));
+        output[i] = value < 0 ? value * 32768 : value * 32767;
+      }
+      return output;
+    }
+
+    function showLevel(samples) {
+      let sum = 0;
+      for (const sample of samples) sum += sample * sample;
+      const rms = Math.sqrt(sum / samples.length);
+      level.style.width = `${Math.min(100, rms * 300)}%`;
+    }
+
+    async function start() {
+      if (!window.isSecureContext) {
+        setState('This link must use HTTPS. Start it using run_web_mic.bat.');
+        return;
+      }
+      toggle.disabled = true;
+      setState('Requesting microphone permission…');
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          },
+          video: false
+        });
+        socket = new WebSocket(wsUrl());
+        socket.binaryType = 'arraybuffer';
+        socket.onclose = () => { if (context) stop('Connection closed.'); };
+        socket.onerror = () => setState('Cannot reach the PC receiver. Keep its tunnel window open.');
+        await new Promise((resolve, reject) => {
+          socket.onopen = resolve;
+          socket.onerror = reject;
+        });
+        context = new AudioContext();
+        await context.resume();
+        source = context.createMediaStreamSource(stream);
+        highPass = context.createBiquadFilter();
+        highPass.type = 'highpass';
+        highPass.frequency.value = 100; // removes handling noise and low hum
+        highPass.Q.value = 0.7;
+        const lowPass = context.createBiquadFilter();
+        lowPass.type = 'lowpass';
+        lowPass.frequency.value = 4800; // voice remains clear; removes high-frequency hiss
+        lowPass.Q.value = 0.7;
+        compressor = context.createDynamicsCompressor();
+        compressor.threshold.value = -28;
+        compressor.knee.value = 18;
+        compressor.ratio.value = 4;
+        compressor.attack.value = 0.004;
+        compressor.release.value = 0.18;
+        processor = context.createScriptProcessor(2048, 1, 1);
+        silentGain = context.createGain();
+        silentGain.gain.value = 0;
+        processor.onaudioprocess = event => {
+          const samples = event.inputBuffer.getChannelData(0);
+          showLevel(samples);
+          if (socket.readyState === WebSocket.OPEN) socket.send(toPcm16(samples, context.sampleRate).buffer);
+        };
+        source.connect(highPass);
+        highPass.connect(lowPass);
+        lowPass.connect(compressor);
+        compressor.connect(processor);
+        processor.connect(silentGain);
+        silentGain.connect(context.destination);
+        toggle.disabled = false;
+        calibrate.disabled = false;
+        toggle.classList.add('live');
+        toggle.textContent = 'STOP MICROPHONE';
+        setState('LIVE — audio is streaming to the PC');
+      } catch (error) {
+        console.error(error);
+        stop('Microphone permission was not granted or the connection failed.');
+      }
+    }
+
+    function stop(message = 'Microphone stopped.') {
+      if (processor) processor.disconnect();
+      if (source) source.disconnect();
+      if (highPass) highPass.disconnect();
+      if (compressor) compressor.disconnect();
+      if (silentGain) silentGain.disconnect();
+      if (stream) stream.getTracks().forEach(track => track.stop());
+      if (context) context.close();
+      if (socket && socket.readyState < WebSocket.CLOSING) socket.close();
+      socket = context = stream = source = highPass = compressor = processor = silentGain = null;
+      gateGain = 0;
+      gateHoldBuffers = 0;
+      gateThreshold = 0.018;
+      calibrating = false;
+      calibrate.disabled = true;
+      level.style.width = '0%';
+      toggle.disabled = false;
+      toggle.classList.remove('live');
+      toggle.textContent = 'START MICROPHONE';
+      setState(message);
+    }
+
+    toggle.addEventListener('click', () => context ? stop() : start());
+    calibrate.addEventListener('click', () => {
+      if (!context || calibrating) return;
+      calibrating = true;
+      calibrationFrames = 0;
+      calibrationTotal = 0;
+      calibrate.disabled = true;
+      setState('Keep silent for 2 seconds — measuring room noise…');
+    });
+  </script>
+</body>
+</html>
